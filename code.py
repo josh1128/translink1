@@ -1,10 +1,19 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
-import plotly.express as px
-from datetime import datetime, timedelta
+from datetime import datetime
 import random
+
+# Try importing plotly, use fallback if not available
+try:
+    import plotly.graph_objects as go
+    import plotly.express as px
+    plotly_available = True
+except ImportError:
+    plotly_available = False
+    import matplotlib.pyplot as plt
+    import matplotlib
+    matplotlib.use('Agg')
 
 # Page configuration
 st.set_page_config(
@@ -13,6 +22,31 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Add requirements expander at the top
+with st.expander("📋 Setup Instructions & Requirements", expanded=False):
+    st.markdown("""
+    ### 📦 Required Packages
+    ```bash
+    pip install streamlit pandas numpy plotly matplotlib
+    ```
+    
+    ### 🚀 Run the Dashboard
+    ```bash
+    streamlit run translink_dashboard.py
+    ```
+    
+    ### 💻 System Requirements
+    - Python 3.8 or higher
+    - Modern web browser (Chrome, Firefox, Edge)
+    - 4GB RAM recommended
+    
+    ### 📚 Dependencies
+    - streamlit ≥ 1.28.0
+    - pandas ≥ 2.0.0  
+    - numpy ≥ 1.24.0
+    - plotly ≥ 5.14.0 (optional - falls back to matplotlib)
+    """)
 
 # Custom CSS for better styling
 st.markdown("""
@@ -49,7 +83,7 @@ st.markdown("""
         color: #2c3e50;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
-    .stPlotlyChart {
+    .stPlotlyChart, .stImage {
         background: white;
         border-radius: 1rem;
         padding: 1rem;
@@ -130,10 +164,8 @@ with col4:
     # Calculate range factor based on temperature (from Athens study)
     if temperature < 10 or temperature > 30:
         range_factor = "↓ Limited"
-        range_color = "#f093fb"
     else:
         range_factor = "✅ Optimal"
-        range_color = "#84fab0"
     
     st.markdown(f"""
     <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 1.5rem; border-radius: 1rem; color: white; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
@@ -144,6 +176,10 @@ with col4:
     """, unsafe_allow_html=True)
 
 st.markdown("---")
+
+# Show Plotly status
+if not plotly_available:
+    st.warning("⚠️ Plotly not installed. Using Matplotlib for charts. For better visuals, run: pip install plotly")
 
 # Two main columns for charts
 left_col, right_col = st.columns(2)
@@ -170,41 +206,63 @@ with left_col:
         charging_power.append(power)
         soc_levels.append(soc)
     
-    # Create dual-axis chart
-    fig = go.Figure()
-    
-    fig.add_trace(go.Bar(
-        x=hours,
-        y=charging_power,
-        name="Charging Power (kW)",
-        marker_color='#0055A4',
-        yaxis='y'
-    ))
-    
-    fig.add_trace(go.Scatter(
-        x=hours,
-        y=soc_levels,
-        name="Average SOC (%)",
-        marker_color='#FF6B6B',
-        yaxis='y2',
-        line=dict(width=3)
-    ))
-    
-    fig.update_layout(
-        xaxis=dict(title="Hour of Day", tickmode='linear', tick0=0, dtick=2),
-        yaxis=dict(title="Charging Power (kW)", side='left', range=[0, 600]),
-        yaxis2=dict(title="State of Charge (%)", side='right', overlaying='y', range=[0, 100]),
-        hovermode='x unified',
-        height=400,
-        margin=dict(l=0, r=0, t=30, b=0),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-    
-    # Add vertical line for current hour
-    current_hour = datetime.now().hour
-    fig.add_vline(x=current_hour, line_dash="dash", line_color="red", opacity=0.5)
-    
-    st.plotly_chart(fig, use_container_width=True)
+    if plotly_available:
+        # Create dual-axis chart with Plotly
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            x=hours,
+            y=charging_power,
+            name="Charging Power (kW)",
+            marker_color='#0055A4',
+            yaxis='y'
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=hours,
+            y=soc_levels,
+            name="Average SOC (%)",
+            marker_color='#FF6B6B',
+            yaxis='y2',
+            line=dict(width=3)
+        ))
+        
+        fig.update_layout(
+            xaxis=dict(title="Hour of Day", tickmode='linear', tick0=0, dtick=2),
+            yaxis=dict(title="Charging Power (kW)", side='left', range=[0, 600]),
+            yaxis2=dict(title="State of Charge (%)", side='right', overlaying='y', range=[0, 100]),
+            hovermode='x unified',
+            height=400,
+            margin=dict(l=0, r=0, t=30, b=0),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        
+        # Add vertical line for current hour
+        current_hour = datetime.now().hour
+        fig.add_vline(x=current_hour, line_dash="dash", line_color="red", opacity=0.5)
+        
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        # Fallback to matplotlib
+        fig, ax1 = plt.subplots(figsize=(10, 4))
+        
+        ax1.bar(hours, charging_power, color='#0055A4', alpha=0.7, label='Charging Power')
+        ax1.set_xlabel('Hour of Day')
+        ax1.set_ylabel('Charging Power (kW)', color='#0055A4')
+        ax1.tick_params(axis='y', labelcolor='#0055A4')
+        
+        ax2 = ax1.twinx()
+        ax2.plot(hours, soc_levels, color='#FF6B6B', linewidth=3, label='SOC %')
+        ax2.set_ylabel('State of Charge (%)', color='#FF6B6B')
+        ax2.tick_params(axis='y', labelcolor='#FF6B6B')
+        
+        # Add vertical line for current hour
+        current_hour = datetime.now().hour
+        ax1.axvline(x=current_hour, color='red', linestyle='--', alpha=0.5)
+        
+        plt.title('Charging Window Optimization')
+        plt.tight_layout()
+        st.pyplot(fig)
     
     st.caption("🕒 Red dashed line indicates current hour. Overnight charging (1-5 AM) optimizes off-peak rates.")
 
@@ -277,30 +335,45 @@ with col5:
             ess_charge.append(random.uniform(-100, 100))
             grid_draw.append(random.uniform(150, 300))
     
-    fig_ess = go.Figure()
-    fig_ess.add_trace(go.Scatter(
-        x=hours_ess, y=ess_charge,
-        fill='tozeroy', name='ESS Charge/Discharge',
-        line=dict(color='#2E86AB')
-    ))
-    fig_ess.add_trace(go.Scatter(
-        x=hours_ess, y=grid_draw,
-        name='Grid Draw',
-        line=dict(color='#A23B72', dash='dot')
-    ))
-    fig_ess.update_layout(
-        title="ESS vs Grid Demand",
-        xaxis_title="Hour",
-        yaxis_title="Power (kW)",
-        height=300,
-        margin=dict(l=0, r=0, t=40, b=0)
-    )
-    st.plotly_chart(fig_ess, use_container_width=True)
+    if plotly_available:
+        fig_ess = go.Figure()
+        fig_ess.add_trace(go.Scatter(
+            x=hours_ess, y=ess_charge,
+            fill='tozeroy', name='ESS Charge/Discharge',
+            line=dict(color='#2E86AB')
+        ))
+        fig_ess.add_trace(go.Scatter(
+            x=hours_ess, y=grid_draw,
+            name='Grid Draw',
+            line=dict(color='#A23B72', dash='dot')
+        ))
+        fig_ess.update_layout(
+            title="ESS vs Grid Demand",
+            xaxis_title="Hour",
+            yaxis_title="Power (kW)",
+            height=300,
+            margin=dict(l=0, r=0, t=40, b=0)
+        )
+        st.plotly_chart(fig_ess, use_container_width=True)
+    else:
+        # Fallback to matplotlib
+        fig, ax = plt.subplots(figsize=(8, 3))
+        ax.fill_between(hours_ess, 0, ess_charge, where=[x>0 for x in ess_charge], 
+                       color='#2E86AB', alpha=0.5, label='ESS Charging')
+        ax.fill_between(hours_ess, 0, ess_charge, where=[x<0 for x in ess_charge], 
+                       color='#2E86AB', alpha=0.8, label='ESS Discharging')
+        ax.plot(hours_ess, grid_draw, color='#A23B72', linestyle='--', label='Grid Draw')
+        ax.set_xlabel('Hour')
+        ax.set_ylabel('Power (kW)')
+        ax.legend()
+        ax.set_title('ESS vs Grid Demand')
+        plt.tight_layout()
+        st.pyplot(fig)
 
 with col6:
     st.markdown("### 💰 Cost & Emissions Summary")
     
-    # Calculate savings based on research [citation:6]
+    # Calculate savings based on research 
     base_cost = 12500
     ess_savings = base_cost * 0.27  # 27% cost reduction from OCC/ESS
     emission_reduction = 13  # 13% reduction
@@ -319,7 +392,7 @@ with col6:
         <div style="background: #e9ecef; height: 20px; border-radius: 10px;">
             <div style="background: #0055A4; width: 56%; height: 20px; border-radius: 10px;"></div>
         </div>
-        <p>56% reduction during on-peak hours [citation:6]</p>
+        <p>56% reduction during on-peak hours </p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -329,10 +402,10 @@ st.markdown("""
 <div style="background: #e3f2fd; padding: 1rem; border-radius: 0.5rem;">
     <h4>📋 Key Recommendations Applied</h4>
     <ul>
-        <li><strong>Energy Storage System (ESS)</strong> - Shifts charging to off-peak, reducing costs by 27% [citation:6]</li>
-        <li><strong>Predictive Range Management</strong> - Accounts for temperature and passenger load (Athens methodology) [citation:3]</li>
-        <li><strong>Optimized Charging Windows</strong> - 56% reduction in on-peak grid demand [citation:6]</li>
-        <li><strong>Multi-Objective Optimization</strong> - Balances infrastructure cost, electricity cost, and emissions [citation:1]</li>
+        <li><strong>Energy Storage System (ESS)</strong> - Shifts charging to off-peak, reducing costs by 27%</li>
+        <li><strong>Predictive Range Management</strong> - Accounts for temperature and passenger load (Athens methodology)</li>
+        <li><strong>Optimized Charging Windows</strong> - 56% reduction in on-peak grid demand</li>
+        <li><strong>Multi-Objective Optimization</strong> - Balances infrastructure cost, electricity cost, and emissions</li>
     </ul>
 </div>
 """, unsafe_allow_html=True)
